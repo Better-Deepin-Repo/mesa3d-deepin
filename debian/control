@@ -5,7 +5,7 @@ Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: Andreas Boll <aboll@debian.org>
 Standards-Version: 4.1.4
 Build-Depends:
- debhelper-compat (= 13), clang-21, llvm-21, librust-cfg-if-dev, librust-bitflags-dev,
+ debhelper-compat (= 13), clang-21, llvm-21,
  bindgen (>= 0.71~) [amd64 arm64 armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x x32],
  bison,
  cbindgen (>= 0.25) [amd64 arm64 armhf i386 loong64 powerpc ppc64 ppc64el riscv64 s390x x32],
