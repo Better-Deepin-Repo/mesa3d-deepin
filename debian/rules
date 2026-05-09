@@ -7,7 +7,7 @@
 
 # 强制用 LLVM/Clang 编译
 export CC=clang-21 
-export CXX=clang-21 
+export CXX=clang++-21 
 export LD=ld.lld-21 
 export LLVM_IAS=1
 # 跳过老旧调试优化
