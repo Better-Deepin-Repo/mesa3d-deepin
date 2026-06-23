@@ -34,13 +34,14 @@ endif
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
 
 # Meson records -Doptimization=3, but Debian's default -O2 from buildflags is
-# appended late in generated compile rules. Append -O3 here so it wins.
-DEB_CFLAGS_MAINT_APPEND := -Wall -O3
-DEB_CXXFLAGS_MAINT_APPEND := -Wall -O3
+# appended late in generated compile rules. Append -O3 here so it wins. Clang
+# 21 defaults to DWARF-5 debug sections that this build's dwz cannot read.
+DEB_CFLAGS_MAINT_APPEND := -Wall -O3 -gdwarf-4
+DEB_CXXFLAGS_MAINT_APPEND := -Wall -O3 -gdwarf-4
 # Clang full LTO links enormous Mesa archives; use lld instead of GNU ld.bfd.
 DEB_LDFLAGS_MAINT_APPEND := -fuse-ld=lld
 # Rust test binaries link Mesa's LTO-enabled C archives through clang too.
-override RUSTFLAGS += -C link-arg=-fuse-ld=lld
+override RUSTFLAGS += -C dwarf-version=4 -C link-arg=-fuse-ld=lld
 export RUSTFLAGS
 ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
   # Workaround for a variant of LP: #725126
