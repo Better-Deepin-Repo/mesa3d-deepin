@@ -5,14 +5,6 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-# 强制用 LLVM/Clang 编译
-export CC=clang-21 
-export CXX=clang++-21 
-export LD=ld.lld-21 
-export LLVM_IAS=1
-# 跳过老旧调试优化
-override_dh_dwz:
-
 include /usr/share/dpkg/pkg-info.mk
 
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
