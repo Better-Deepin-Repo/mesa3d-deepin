@@ -16,10 +16,32 @@ DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 LLVM_VERSION = 21
 export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:$(PATH)
 
+# Leave an existing clang debuild environment alone; otherwise force clang.
+MESA_CC_IS_CLANG := $(shell $(CC) -dM -E -x c /dev/null 2>/dev/null | grep -q '__clang__' && echo yes || echo no)
+ifneq ($(MESA_CC_IS_CLANG),yes)
+  override CC := clang
+  export CC
+endif
+
+MESA_CXX_IS_CLANG := $(shell $(CXX) -dM -E -x c++ /dev/null 2>/dev/null | grep -q '__clang__' && echo yes || echo no)
+ifneq ($(MESA_CXX_IS_CLANG),yes)
+  override CXX := clang++
+  export CXX
+endif
+
+# Keep dpkg-buildflags from injecting its own LTO flags; Meson controls Mesa's
+# full LTO mode explicitly via b_lto/b_lto_mode below.
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
 
-DEB_CFLAGS_MAINT_APPEND := -Wall
-DEB_CXXFLAGS_MAINT_APPEND := -Wall
+# Meson records -Doptimization=3, but Debian's default -O2 from buildflags is
+# appended late in generated compile rules. Append -O3 here so it wins.
+DEB_CFLAGS_MAINT_APPEND := -Wall -O3
+DEB_CXXFLAGS_MAINT_APPEND := -Wall -O3
+# Clang full LTO links enormous Mesa archives; use lld instead of GNU ld.bfd.
+DEB_LDFLAGS_MAINT_APPEND := -fuse-ld=lld
+# Rust test binaries link Mesa's LTO-enabled C archives through clang too.
+override RUSTFLAGS += -C link-arg=-fuse-ld=lld
+export RUSTFLAGS
 ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
   # Workaround for a variant of LP: #725126
   DEB_CFLAGS_MAINT_APPEND += -fno-optimize-sibling-calls
@@ -40,6 +62,7 @@ endif
 buildflags = $(shell \
 	DEB_CFLAGS_MAINT_APPEND='$(DEB_CFLAGS_MAINT_APPEND)' \
 	DEB_CXXFLAGS_MAINT_APPEND='$(DEB_CXXFLAGS_MAINT_APPEND)' \
+	DEB_LDFLAGS_MAINT_APPEND='$(DEB_LDFLAGS_MAINT_APPEND)' \
 	dpkg-buildflags --export=configure)
 
 EGL_PLATFORMS = x11
@@ -175,6 +198,10 @@ confflags += \
 	-Dvulkan-manifest-per-architecture=false \
 	-Dglvnd=enabled \
 	-Db_ndebug=true \
+	-Dallow-broken-lto=true \
+	-Db_lto=true \
+	-Db_lto_mode=default \
+	-Doptimization=3 \
 	-Dbuild-tests=true \
 	-Dtools=drm-shim \
 	$(confflags_DIRECT_RENDERING) \
