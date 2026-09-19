@@ -56,6 +56,11 @@ RUSTICL_ARCHS  = amd64 arm64 armhf i386 loong64 ppc64el riscv64 x32
 NVK_ARCHS      = amd64 arm64 armhf i386 riscv64
 VALGRIND_ARCHS = amd64 arm64 armhf i386 powerpc ppc64 ppc64el riscv64 s390x
 
+# bindgen-cli is fetched and built from crates.io at configure time (the
+# deepin v25 one is older than the meson.build gate). Keep in sync with
+# meson.build: must be >= 0.71.1 and not the blacklisted 0.72.0.
+BINDGEN_VERSION = 0.73.2
+
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
   confflags_DIRECT_RENDERING = -Dglx-direct=false
@@ -157,7 +162,6 @@ else
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), $(NVK_ARCHS)))
-		export MESON_PACKAGE_CACHE_DIR=/usr/share/cargo/registry/
 		VULKAN_DEFAULTS += nvk
 		VULKAN_DRIVERS += nouveau
 	endif
@@ -204,9 +208,6 @@ confflags += \
 	$(confflags_TEFLON)
 
 
-rewrite_wrap_files:
-	debian/get-wraps-from-cargo-registry.py --cargo-registry /usr/share/cargo/registry
-
 override_dh_clean: regen_control
 	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' | sed 's/-.*//;s/~/-/' > VERSION
 	rm -rf build
@@ -222,11 +223,25 @@ override_dh_clean: regen_control
 		rm -rf subprojects; \
 		mv subprojects-save subprojects; \
 	fi
+	rm -rf debian/bindgen-target debian/cargo-home
 	dh_clean
 
-override_dh_auto_configure: rewrite_wrap_files
+# debhelper's meson buildsystem hardcodes --wrap-mode=nodownload before our
+# args with no way to unset it, so explicitly re-set the wrap mode
+# afterwards (argparse last-one-wins) to let meson fetch the *-rs.wrap
+# crates from crates.io at configure time, verified via each wrap's
+# source_hash.
+override_dh_auto_configure:
 	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' > VERSION
+	@echo ' $(RUSTICL_ARCHS) ' | grep -q ' $(DEB_HOST_ARCH) ' || exit 0; \
+	echo "Fetching bindgen-cli $(BINDGEN_VERSION) from crates.io (cargo install)"; \
+	mkdir -p debian/cargo-home; \
+	CARGO_HOME=$(CURDIR)/debian/cargo-home \
+		cargo install bindgen-cli --version $(BINDGEN_VERSION) \
+		--locked --root $(CURDIR)/debian/bindgen-target
+	PATH="$(CURDIR)/debian/bindgen-target/bin:$$PATH" \
 	$(buildflags) dh_auto_configure -- \
+		--wrap-mode=default \
 		$(confflags)
 
 override_dh_auto_install:
