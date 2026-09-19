@@ -157,7 +157,6 @@ else
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), $(NVK_ARCHS)))
-		export MESON_PACKAGE_CACHE_DIR=/usr/share/cargo/registry/
 		VULKAN_DEFAULTS += nvk
 		VULKAN_DRIVERS += nouveau
 	endif
@@ -204,9 +203,6 @@ confflags += \
 	$(confflags_TEFLON)
 
 
-rewrite_wrap_files:
-	debian/get-wraps-from-cargo-registry.py --cargo-registry /usr/share/cargo/registry
-
 override_dh_clean: regen_control
 	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' | sed 's/-.*//;s/~/-/' > VERSION
 	rm -rf build
@@ -222,12 +218,55 @@ override_dh_clean: regen_control
 		rm -rf subprojects; \
 		mv subprojects-save subprojects; \
 	fi
-	dh_clean
+	rm -rf debian/bindgen-target debian/cargo-home
+	# dh_clean deletes *.orig tree-wide by default; the vendored crates'
+	# Cargo.toml.orig files are required by "cargo build --locked".
+	dh_clean -X 'bindgen/*'
 
-override_dh_auto_configure: rewrite_wrap_files
+override_dh_auto_configure:
 	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' > VERSION
+	@if [ ! -d subprojects/packagecache ] && ls debian/vendor/mesa_*.orig-subprojects.tar.xz >/dev/null 2>&1; then \
+		echo "*** Populating subprojects/packagecache from debian/vendor (git-clone build)"; \
+		tar -xJf $$(ls debian/vendor/mesa_*.orig-subprojects.tar.xz | head -n 1) \
+			--wildcards --strip-components=1 -C subprojects '*/packagecache/*'; \
+	fi
+	@if [ ! -d bindgen ] && ls debian/vendor/mesa_*.orig-bindgen.tar.xz >/dev/null 2>&1; then \
+		echo "*** Populating bindgen/ from debian/vendor (git-clone build)"; \
+		mkdir -p bindgen; \
+		tar -xJf $$(ls debian/vendor/mesa_*.orig-bindgen.tar.xz | head -n 1) \
+			--strip-components=1 -C bindgen; \
+	fi
+	@for w in subprojects/*-rs.wrap; do \
+		f=$$(sed -n 's/^source_filename = //p' $$w); \
+		if [ ! -f subprojects/packagecache/$$f ]; then \
+			echo "*** Missing vendored crate $$f ($$w). Either put"; \
+			echo "*** mesa_<upstream-version>.orig-subprojects.tar.xz next to the source tree"; \
+			echo "*** (dpkg-source unpacks it to subprojects/packagecache) or regenerate"; \
+			echo "*** it (incl. the debian/vendor copy) with debian/make-vendor.sh"; \
+			echo "*** on a machine with network access."; \
+			exit 1; \
+		fi; \
+	done
+	@echo ' $(RUSTICL_ARCHS) ' | grep -q ' $(DEB_HOST_ARCH) ' || exit 0; \
+	if ! ls -d bindgen/bindgen-cli-* >/dev/null 2>&1; then \
+		echo "*** Missing vendored bindgen-cli. Either put"; \
+		echo "*** mesa_<upstream-version>.orig-bindgen.tar.xz next to the source tree"; \
+		echo "*** (dpkg-source unpacks it to bindgen/) or regenerate"; \
+		echo "*** it (incl. the debian/vendor copy) with debian/make-vendor.sh"; \
+		echo "*** on a machine with network access."; \
+		exit 1; \
+	fi; \
+	dir=$$(ls -d bindgen/bindgen-cli-* | head -n 1); \
+	echo "Building vendored bindgen-cli from $$dir (cargo --offline)"; \
+	mkdir -p debian/cargo-home; \
+	( cd $$dir && \
+	  CARGO_HOME=$(CURDIR)/debian/cargo-home CARGO_NET_OFFLINE=true \
+		cargo build --release --offline --locked \
+		--target-dir $(CURDIR)/debian/bindgen-target )
+	PATH="$(CURDIR)/debian/bindgen-target/release:$$PATH" \
 	$(buildflags) dh_auto_configure -- \
-		$(confflags)
+		$(confflags) \
+		--wrap-mode=nodownload
 
 override_dh_auto_install:
 	dh_auto_install
