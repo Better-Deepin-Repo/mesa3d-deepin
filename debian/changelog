@@ -1,3 +1,10 @@
+mesa (26.2.3-3) UNRELEASED; urgency=medium
+
+  [ Daniel van Vugt ]
+  * Add lp2143073.patch (LP: #2143073)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 01 Oct 2026 21:28:10 +0300
+
 mesa (26.2.3-2) unstable; urgency=medium
 
   * Migrate to llvm-22.
